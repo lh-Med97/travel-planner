@@ -1,6 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import { JWT } from 'next-auth/jwt';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import NextAuth from 'next-auth/next';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
@@ -25,53 +26,62 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error('Please enter your email and password');
         }
 
         const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
+          where: { email: credentials.email }
         });
 
         if (!user) {
-          return null;
+          throw new Error('No user found with this email');
         }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
 
         if (!isPasswordValid) {
-          return null;
+          throw new Error('Invalid password');
         }
 
         return {
           id: user.id,
           email: user.email,
           name: user.name,
+          image: user.image,
         };
-      },
+      }
     }),
   ],
-  session: {
-    strategy: 'jwt',
-  },
   pages: {
-    signIn: '/auth/signin',
+    signIn: '/auth/login',
+    error: '/auth/login',  
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+        token.picture = user.image;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
+      if (token) {
         session.user.id = token.id as string;
+        session.user.email = token.email as string;
+        session.user.name = token.name as string;
+        session.user.image = token.picture as string;
       }
       return session;
     },
   },
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  secret: process.env.NEXTAUTH_SECRET,
 };
 
-export { default } from 'next-auth/next';
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };

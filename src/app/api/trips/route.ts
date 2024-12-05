@@ -1,16 +1,23 @@
+
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import prisma from '@/lib/prisma';
+import { createTripSchema, tripQuerySchema } from '@/lib/validations/schema';
+import { successResponse, errorResponse } from '@/lib/api-response';
+import { ValidationError, NotFoundError } from '@/lib/errors';
 
-// GET /api/trips - Get all trips for the current user
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errorResponse('Unauthorized', 401);
     }
+
+    // Parse and validate query parameters
+    const { searchParams } = new URL(request.url);
+    const query = Object.fromEntries(searchParams);
+    const validatedQuery = tripQuerySchema.parse(query);
 
     const trips = await prisma.trip.findMany({
       where: {
@@ -18,43 +25,40 @@ export async function GET() {
       },
       include: {
         destinations: true
-      }
+      },
+      orderBy: validatedQuery.sortBy ? {
+        [validatedQuery.sortBy]: validatedQuery.order || 'desc'
+      } : undefined,
+      take: validatedQuery.limit || 10,
+      skip: validatedQuery.page ? (validatedQuery.page - 1) * (validatedQuery.limit || 10) : 0
     });
 
-    return NextResponse.json(trips);
+    return successResponse(trips);
   } catch (error) {
     console.error('Error fetching trips:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500 }
-    );
+    if (error instanceof ValidationError) {
+      return errorResponse(error.message, 400);
+    }
+    return errorResponse('Internal Server Error', 500);
   }
 }
 
-// POST /api/trips - Create a new trip
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errorResponse('Unauthorized', 401);
     }
 
     const data = await request.json();
-    const { title, startDate, endDate, destinations } = data;
+    const validatedData = createTripSchema.parse(data);
 
     const trip = await prisma.trip.create({
       data: {
-        title,
-        startDate,
-        endDate,
+        ...validatedData,
         userId: session.user.id,
         destinations: {
-          create: destinations.map((dest: any) => ({
-            name: dest.name,
-            description: dest.description,
-            date: dest.date
-          }))
+          create: validatedData.destinations
         }
       },
       include: {
@@ -62,12 +66,12 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json(trip, { status: 201 });
+    return successResponse(trip, 201);
   } catch (error) {
     console.error('Error creating trip:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500 }
-    );
+    if (error instanceof ValidationError) {
+      return errorResponse(error.message, 400);
+    }
+    return errorResponse('Internal Server Error', 500);
   }
 }

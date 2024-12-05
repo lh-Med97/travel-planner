@@ -1,26 +1,48 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+interface LoginFormData {
+  email: string;
+  password: string;
+}
 
 export default function LoginPage() {
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const router = useRouter();
+  const { register, handleSubmit, formState: { errors }, setError } = useForm<LoginFormData>();
+  const [error, setErrorState] = useState<string | null>(null);
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: LoginFormData) => {
     try {
       const result = await signIn('credentials', {
         redirect: false,
         email: data.email,
         password: data.password,
+        callbackUrl: '/'  // Explicitly set the callback URL
       });
 
-      if (result?.error) {
-        console.error(result.error);
+      if (!result) {
+        setError('Authentication failed');
+        return;
+      }
+
+      if (result.error) {
+        console.error('Authentication error:', result.error);
+        setError(result.error);
+        return;
+      }
+
+      // Successful login
+      if (result.ok) {
+        router.push(result.url || '/');
       }
     } catch (error) {
       console.error('Login error:', error);
+      setError('An unexpected error occurred during login');
     }
   };
 
@@ -30,6 +52,11 @@ export default function LoginPage() {
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Connectez-vous à votre compte
         </h2>
+        {error && (
+          <div className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
         <p className="mt-2 text-center text-sm text-gray-600">
           Ou{' '}
           <Link href="/auth/register" className="font-medium text-blue-600 hover:text-blue-500">

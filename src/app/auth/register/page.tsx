@@ -1,13 +1,23 @@
+'use client';
+
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+interface RegisterFormData {
+  name: string;
+  email: string;
+  password: string;
+}
 
 export default function RegisterPage() {
-  const { register, handleSubmit, formState: { errors }, watch } = useForm();
+  const router = useRouter();
+  const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormData>();
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: RegisterFormData) => {
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -16,8 +26,7 @@ export default function RegisterPage() {
       });
 
       if (response.ok) {
-        // Redirect to login page after successful registration
-        window.location.href = '/auth/login';
+        router.push('/auth/login');
       } else {
         const error = await response.json();
         console.error('Registration error:', error);
@@ -46,10 +55,10 @@ export default function RegisterPage() {
                 <input
                   id="name"
                   type="text"
-                  {...register('name', { required: true })}
+                  {...register('name', { required: 'Name is required' })}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
-                {errors.name && <span className="text-red-500 text-sm">Ce champ est requis</span>}
+                {errors.name && <span className="text-red-500 text-sm">{errors.name.message}</span>}
               </div>
             </div>
 
@@ -62,12 +71,15 @@ export default function RegisterPage() {
                   id="email"
                   type="email"
                   {...register('email', {
-                    required: true,
-                    pattern: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    required: 'Email is required',
+                    pattern: {
+                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                      message: 'Invalid email address'
+                    }
                   })}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
-                {errors.email && <span className="text-red-500 text-sm">Email invalide</span>}
+                {errors.email && <span className="text-red-500 text-sm">{errors.email.message}</span>}
               </div>
             </div>
 
@@ -79,14 +91,16 @@ export default function RegisterPage() {
                 <input
                   id="password"
                   type="password"
-                  {...register('password', { required: true, minLength: 6 })}
+                  {...register('password', { 
+                    required: 'Password is required',
+                    minLength: {
+                      value: 6,
+                      message: 'Password must be at least 6 characters'
+                    }
+                  })}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
-                {errors.password && (
-                  <span className="text-red-500 text-sm">
-                    Le mot de passe doit contenir au moins 6 caractères
-                  </span>
-                )}
+                {errors.password && <span className="text-red-500 text-sm">{errors.password.message}</span>}
               </div>
             </div>
 

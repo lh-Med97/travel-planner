@@ -1,93 +1,45 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MagnifyingGlassIcon, FunnelIcon, StarIcon, CurrencyDollarIcon, GlobeEuropeAfricaIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Navbar from '@/components/Navbar';
 
-interface Destination {
-  id: number;
-  name: string;
-  country: string;
-  description: string;
-  imageUrl: string;
-  rating: number;
-  priceRange: string;
-  category: string;
-  activities: string[];
-  bestTimeToVisit: string;
-  language: string;
-  currency: string;
-  duration: string;
-  climate: string;
+interface Location {
+  lat: number;
+  lng: number;
+  address: string;
 }
 
-const sampleDestinations: Destination[] = [
-  {
-    id: 1,
-    name: 'Paris',
-    country: 'France',
-    description: 'The City of Light, known for its iconic Eiffel Tower, world-class museums, and exquisite cuisine. Experience the romance of Parisian cafes, historic architecture, and artistic heritage.',
-    imageUrl: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
-    rating: 4.8,
-    priceRange: '$$$',
-    category: 'City',
-    activities: ['Eiffel Tower Visit', 'Louvre Museum', 'Seine River Cruise', 'Notre-Dame Cathedral', 'Montmartre Walk'],
-    bestTimeToVisit: 'April to October',
-    language: 'French',
-    currency: 'Euro',
-    duration: '4-7 days',
-    climate: 'Mediterranean'
-  },
-  {
-    id: 2,
-    name: 'Bali',
-    country: 'Indonesia',
-    description: 'A tropical paradise with pristine beaches, ancient temples, lush rice terraces, and vibrant culture. Perfect for both relaxation and adventure.',
-    imageUrl: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4',
-    rating: 4.7,
-    priceRange: '$$',
-    category: 'Beach',
-    activities: ['Temple Visits', 'Surfing', 'Rice Terrace Tours', 'Spa Treatments', 'Sunset Beach Walks'],
-    bestTimeToVisit: 'April to October',
-    language: 'Indonesian',
-    currency: 'Indonesian Rupiah',
-    duration: '1-2 weeks',
-    climate: 'Tropical'
-  },
-  {
-    id: 3,
-    name: 'Kyoto',
-    country: 'Japan',
-    description: 'Ancient capital of Japan featuring stunning temples, traditional gardens, and preserved cultural districts. Experience authentic Japanese culture and history.',
-    imageUrl: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e',
-    rating: 4.9,
-    priceRange: '$$$',
-    category: 'Cultural',
-    activities: ['Temple Tours', 'Tea Ceremonies', 'Geisha District Visit', 'Japanese Garden Tours', 'Kimono Experience'],
-    bestTimeToVisit: 'March to May, October to November',
-    language: 'Japanese',
-    currency: 'Japanese Yen',
-    duration: '4-7 days',
-    climate: 'Continental'
-  },
-  {
-    id: 4,
-    name: 'Santorini',
-    country: 'Greece',
-    description: 'Stunning volcanic island known for its white-washed buildings, blue-domed churches, and spectacular sunsets over the Aegean Sea.',
-    imageUrl: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff',
-    rating: 4.8,
-    priceRange: '$$$',
-    category: 'Beach',
-    activities: ['Sunset Watching', 'Wine Tasting', 'Boat Tours', 'Beach Hopping', 'Historical Site Visits'],
-    bestTimeToVisit: 'June to September',
-    language: 'Greek',
-    currency: 'Euro',
-    duration: '1-3 days',
-    climate: 'Mediterranean'
-  }
-];
+interface Photo {
+  reference: string;
+  url: string;
+}
+
+interface PlaceDetails {
+  website?: string;
+  formatted_phone_number?: string;
+  opening_hours?: {
+    weekday_text: string[];
+  };
+  reviews?: Array<{
+    author_name: string;
+    rating: number;
+    text: string;
+    time: number;
+  }>;
+}
+
+interface Destination {
+  id: string;
+  name: string;
+  location: Location;
+  rating: number;
+  photos: Photo[];
+  priceLevel?: number;
+  types: string[];
+  details: PlaceDetails | null;
+}
 
 export default function DestinationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,39 +48,102 @@ export default function DestinationsPage() {
   const [sortBy, setSortBy] = useState('rating');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(6);
-  const [durationFilter, setDurationFilter] = useState('All');
-  const [climateFilter, setClimateFilter] = useState('All');
-  const [ratingFilter, setRatingFilter] = useState(0);
-  
-  const categories = ['All', 'City', 'Beach', 'Mountain', 'Cultural', 'Adventure'];
-  const priceRanges = ['All', '$', '$$', '$$$'];
-  const durations = ['All', '1-3 days', '4-7 days', '1-2 weeks', '2+ weeks'];
-  const climates = ['All', 'Tropical', 'Mediterranean', 'Continental', 'Alpine'];
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [enhancedDescriptions, setEnhancedDescriptions] = useState<{[key: string]: string}>({});
+
+  const categories = ['All', 'Tourist Attraction', 'Restaurant', 'Hotel', 'Museum', 'Park'];
+  const priceRanges = ['All', '1', '2', '3', '4'];
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch places when search changes
+  useEffect(() => {
+    const fetchPlaces = async () => {
+      if (!debouncedSearch) {
+        setDestinations([]);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const type = selectedCategory === 'All' ? 'tourist_attraction' : selectedCategory.toLowerCase();
+        const response = await fetch(
+          `/api/places?query=${encodeURIComponent(debouncedSearch)}&type=${type}`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch places');
+        }
+
+        const data = await response.json();
+        setDestinations(data.places);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+        setDestinations([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPlaces();
+  }, [debouncedSearch, selectedCategory]);
+
+  const getEnhancedDescription = async (placeName: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: `Provide a brief, engaging description of ${placeName} as a travel destination. Include key attractions and what makes it special. Keep it under 100 words.`
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to get AI description');
+      
+      const data = await response.json();
+      setEnhancedDescriptions(prev => ({
+        ...prev,
+        [placeName]: data.content
+      }));
+    } catch (error) {
+      console.error('Error getting AI description:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredDestinations = useMemo(() => {
-    return sampleDestinations
+    return destinations
       .filter(destination => {
-        const matchesSearch = 
-          destination.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          destination.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          destination.description.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = selectedCategory === 'All' || destination.category === selectedCategory;
-        const matchesPrice = priceFilter === 'All' || destination.priceRange === priceFilter;
-        const matchesDuration = durationFilter === 'All' || destination.duration === durationFilter;
-        const matchesClimate = climateFilter === 'All' || destination.climate === climateFilter;
-        const matchesRating = destination.rating >= ratingFilter;
-        
-        return matchesSearch && matchesCategory && matchesPrice && matchesDuration && matchesClimate && matchesRating;
+        const matchesPrice = priceFilter === 'All' || 
+          destination.priceLevel === Number(priceFilter);
+        return matchesPrice;
       })
       .sort((a, b) => {
-        if (sortBy === 'rating') return b.rating - a.rating;
+        if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
         if (sortBy === 'name') return a.name.localeCompare(b.name);
         if (sortBy === 'price') {
-          return a.priceRange.length - b.priceRange.length;
+          return (a.priceLevel || 0) - (b.priceLevel || 0);
         }
         return 0;
       });
-  }, [searchQuery, selectedCategory, priceFilter, sortBy, durationFilter, climateFilter, ratingFilter]);
+  }, [destinations, priceFilter, sortBy]);
 
   // Pagination
   const totalPages = Math.ceil(filteredDestinations.length / itemsPerPage);
@@ -150,13 +165,12 @@ export default function DestinationsPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">Discover Amazing Destinations</h1>
             
-            {/* Advanced Search and Filters */}
+            {/* Search and Filters */}
             <div className="space-y-4">
-              {/* Search Bar */}
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search destinations, countries, or activities..."
+                  placeholder="Search destinations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -164,14 +178,12 @@ export default function DestinationsPage() {
                 <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
               </div>
               
-              {/* Filter Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
                 >
-                  <option value="" disabled>Category</option>
                   {categories.map(category => (
                     <option key={category} value={category}>{category}</option>
                   ))}
@@ -182,192 +194,192 @@ export default function DestinationsPage() {
                   onChange={(e) => setPriceFilter(e.target.value)}
                   className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
                 >
-                  <option value="" disabled>Price Range</option>
+                  <option value="All">Any Price</option>
                   {priceRanges.map(price => (
-                    <option key={price} value={price}>{price}</option>
+                    <option key={price} value={price}>
+                      {price === 'All' ? 'Any Price' : '💰'.repeat(Number(price))}
+                    </option>
                   ))}
                 </select>
 
                 <select
-                  value={durationFilter}
-                  onChange={(e) => setDurationFilter(e.target.value)}
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
                   className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
                 >
-                  <option value="" disabled>Duration</option>
-                  {durations.map(duration => (
-                    <option key={duration} value={duration}>{duration}</option>
-                  ))}
+                  <option value="rating">Top Rated</option>
+                  <option value="name">Alphabetical</option>
+                  <option value="price">Price (Low to High)</option>
                 </select>
-
-                <select
-                  value={climateFilter}
-                  onChange={(e) => setClimateFilter(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
-                >
-                  <option value="" disabled>Climate</option>
-                  {climates.map(climate => (
-                    <option key={climate} value={climate}>{climate}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Additional Filters */}
-              <div className="flex flex-wrap gap-4 items-center">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Min Rating:</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="5"
-                    step="0.5"
-                    value={ratingFilter}
-                    onChange={(e) => setRatingFilter(Number(e.target.value))}
-                    className="w-32"
-                  />
-                  <span className="text-sm text-gray-600">{ratingFilter}+ ⭐</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Sort by:</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
-                  >
-                    <option value="rating">Top Rated</option>
-                    <option value="name">Alphabetical</option>
-                    <option value="price">Price (Low to High)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600">Items per page:</label>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    className="border border-gray-300 rounded-lg px-4 py-2 bg-white"
-                  >
-                    <option value={6}>6</option>
-                    <option value={9}>9</option>
-                    <option value={12}>12</option>
-                  </select>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* Results Summary */}
-          <div className="mb-4 text-gray-600">
-            Showing {paginatedDestinations.length} of {filteredDestinations.length} destinations
-          </div>
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          )}
 
-          {/* Destinations Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedDestinations.map((destination) => (
-              <div key={destination.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                <div className="relative h-48">
-                  <img
-                    src={destination.imageUrl}
-                    alt={destination.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
-                    <StarIconSolid className="h-4 w-4 text-yellow-400" />
-                    {destination.rating}
-                  </div>
-                </div>
-                
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">{destination.name}</h3>
-                      <p className="text-gray-600">{destination.country}</p>
-                    </div>
-                    <span className="text-gray-600 font-medium">{destination.priceRange}</span>
-                  </div>
-                  
-                  <p className="text-gray-600 mb-4 line-clamp-2">{destination.description}</p>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-gray-500">
-                      <GlobeEuropeAfricaIcon className="h-4 w-4 mr-2" />
-                      <span>Best Time: {destination.bestTimeToVisit}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {destination.activities.slice(0, 3).map((activity, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                        >
-                          {activity}
-                        </span>
-                      ))}
-                      {destination.activities.length > 3 && (
-                        <span className="text-sm text-gray-500">+{destination.activities.length - 3} more</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-8 flex justify-center gap-2">
+          {/* Error State */}
+          {error && (
+            <div className="text-center py-12">
+              <p className="text-red-500">{error}</p>
               <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                onClick={() => setSearchQuery('')}
+                className="mt-4 text-blue-600 hover:text-blue-700"
               >
-                <ChevronLeftIcon className="h-5 w-5" />
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`px-4 py-2 rounded-lg border ${
-                    currentPage === page
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                <ChevronRightIcon className="h-5 w-5" />
+                Clear search
               </button>
             </div>
           )}
 
-          {/* No Results Message */}
-          {filteredDestinations.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">No destinations found matching your criteria.</p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('All');
-                  setPriceFilter('All');
-                  setDurationFilter('All');
-                  setClimateFilter('All');
-                  setRatingFilter(0);
-                }}
-                className="mt-4 text-blue-600 hover:text-blue-700"
-              >
-                Reset all filters
-              </button>
-            </div>
+          {/* Results */}
+          {!isLoading && !error && (
+            <>
+              {/* Results Summary */}
+              {searchQuery && (
+                <div className="mb-4 text-gray-600">
+                  Found {filteredDestinations.length} destinations
+                </div>
+              )}
+
+              {/* Destinations Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {paginatedDestinations.map((destination) => (
+                  <div key={destination.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
+                    <div className="relative h-48">
+                      {destination.photos?.[0] ? (
+                        <img
+                          src={destination.photos[0].url}
+                          alt={destination.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-gray-400">No image available</span>
+                        </div>
+                      )}
+                      {destination.rating && (
+                        <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
+                          <StarIconSolid className="h-4 w-4 text-yellow-400" />
+                          {destination.rating.toFixed(1)}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">{destination.name}</h3>
+                          <p className="text-gray-600 text-sm">{destination.location.address}</p>
+                        </div>
+                        {destination.priceLevel && (
+                          <span className="text-gray-600 font-medium">
+                            {'💰'.repeat(destination.priceLevel)}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {destination.details?.opening_hours && (
+                        <div className="mt-2 text-sm text-gray-500">
+                          <p>
+                            {destination.details.opening_hours.weekday_text[0]}
+                          </p>
+                        </div>
+                      )}
+                      
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {destination.types.slice(0, 3).map((type, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                          >
+                            {type.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+
+                      {enhancedDescriptions[destination.name] ? (
+                        <p className="text-gray-600 mb-2">{enhancedDescriptions[destination.name]}</p>
+                      ) : (
+                        <button
+                          onClick={() => getEnhancedDescription(destination.name)}
+                          disabled={loading}
+                          className="text-blue-500 hover:text-blue-700 mb-2"
+                        >
+                          {loading ? 'Loading...' : 'Get AI-powered description'}
+                        </button>
+                      )}
+                      
+                      {destination.details?.website && (
+                        <a
+                          href={destination.details.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-4 inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Visit Website
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-8 flex justify-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    <ChevronLeftIcon className="h-5 w-5" />
+                  </button>
+                  
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-4 py-2 rounded-lg border ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    <ChevronRightIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+
+              {/* No Results */}
+              {searchQuery && filteredDestinations.length === 0 && !isLoading && (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 text-lg">No destinations found matching your criteria.</p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedCategory('All');
+                      setPriceFilter('All');
+                    }}
+                    className="mt-4 text-blue-600 hover:text-blue-700"
+                  >
+                    Reset all filters
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

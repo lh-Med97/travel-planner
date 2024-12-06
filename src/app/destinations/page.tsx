@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { MagnifyingGlassIcon, FunnelIcon, StarIcon, CurrencyDollarIcon, GlobeEuropeAfricaIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Navbar from '@/components/Navbar';
+import { AITravelService, TripPreferences } from '@/lib/ai-service';
 
 interface Location {
   lat: number;
@@ -54,6 +55,14 @@ export default function DestinationsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [enhancedDescriptions, setEnhancedDescriptions] = useState<{[key: string]: string}>({});
+  const [preferences, setPreferences] = useState<TripPreferences>({
+    budget: '',
+    duration: '',
+    interests: [],
+    travelStyle: '',
+    season: ''
+  });
+  const [recommendations, setRecommendations] = useState<string>('');
 
   const categories = ['All', 'Tourist Attraction', 'Restaurant', 'Hotel', 'Museum', 'Park'];
   const priceRanges = ['All', '1', '2', '3', '4'];
@@ -155,6 +164,21 @@ export default function DestinationsPage() {
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePreferencesSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await AITravelService.getDestinationRecommendations(preferences);
+      setRecommendations(result);
+    } catch (error) {
+      console.error('Error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to get recommendations');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -382,6 +406,96 @@ export default function DestinationsPage() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">AI Travel Recommendations</h1>
+        
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+        
+        <form onSubmit={handlePreferencesSubmit} className="space-y-6 mb-8">
+          <div>
+            <label className="block text-sm font-medium mb-2">Budget Range</label>
+            <select
+              className="w-full p-2 border rounded"
+              value={preferences.budget}
+              onChange={(e) => setPreferences({ ...preferences, budget: e.target.value })}
+            >
+              <option value="">Select Budget</option>
+              <option value="budget">Budget ($)</option>
+              <option value="moderate">Moderate ($$)</option>
+              <option value="luxury">Luxury ($$$)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Trip Duration</label>
+            <select
+              className="w-full p-2 border rounded"
+              value={preferences.duration}
+              onChange={(e) => setPreferences({ ...preferences, duration: e.target.value })}
+            >
+              <option value="">Select Duration</option>
+              <option value="weekend">Weekend Getaway</option>
+              <option value="week">One Week</option>
+              <option value="twoWeeks">Two Weeks</option>
+              <option value="month">One Month+</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Travel Style</label>
+            <select
+              className="w-full p-2 border rounded"
+              value={preferences.travelStyle}
+              onChange={(e) => setPreferences({ ...preferences, travelStyle: e.target.value })}
+            >
+              <option value="">Select Style</option>
+              <option value="adventure">Adventure</option>
+              <option value="relaxation">Relaxation</option>
+              <option value="cultural">Cultural</option>
+              <option value="luxury">Luxury</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Season</label>
+            <select
+              className="w-full p-2 border rounded"
+              value={preferences.season}
+              onChange={(e) => setPreferences({ ...preferences, season: e.target.value })}
+            >
+              <option value="">Select Season</option>
+              <option value="spring">Spring</option>
+              <option value="summer">Summer</option>
+              <option value="fall">Fall</option>
+              <option value="winter">Winter</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+            disabled={loading}
+          >
+            {loading ? 'Getting Recommendations...' : 'Get AI Recommendations'}
+          </button>
+        </form>
+
+        {recommendations && (
+          <div className="mt-8 p-6 bg-white rounded-lg shadow">
+            <h2 className="text-2xl font-semibold mb-4">Your Personalized Recommendations</h2>
+            <div className="prose max-w-none">
+              {recommendations.split('\n').map((line, index) => (
+                <p key={index}>{line}</p>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

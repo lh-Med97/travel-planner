@@ -8,39 +8,102 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String      @id @default(cuid())
   name          String?
-  email         String    @unique
+  email         String      @unique
   password      String
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   trips         Trip[]
+  reviews       Review[]
+  savedPlaces   Destination[] @relation("UserSavedPlaces")
 }
 
 model Trip {
   id           String        @id @default(cuid())
   title        String
+  description  String?       @db.Text
   startDate    DateTime
   endDate      DateTime
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  status       TripStatus   @default(PLANNED)
+  budget       Float?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   destinations Destination[]
+  activities   Activity[]
+  notes        Note[]
 
   @@index([userId])
 }
 
 model Destination {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
-  description String?   @db.Text
-  date        DateTime
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  tripId      String
-  trip        Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  description String?      @db.Text
+  location    Json?        // Stores latitude and longitude
+  category    String?
+  priceRange  String?
+  image       String?
+  rating      Float?       @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  trips       Trip[]
+  reviews     Review[]
+  activities  Activity[]
+  savedByUsers User[]      @relation("UserSavedPlaces")
+}
+
+model Activity {
+  id            String      @id @default(cuid())
+  title         String
+  description   String?     @db.Text
+  date          DateTime?
+  time          String?
+  location      String?
+  cost          Float?
+  tripId        String
+  destinationId String?
+  trip          Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  destination   Destination? @relation(fields: [destinationId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([tripId])
+  @@index([destinationId])
+}
+
+model Review {
+  id            String      @id @default(cuid())
+  rating        Int
+  comment       String?     @db.Text
+  userId        String
+  destinationId String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([destinationId])
+}
+
+model Note {
+  id        String    @id @default(cuid())
+  content   String    @db.Text
+  tripId    String
+  trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tripId])
+}
+
+enum TripStatus {
+  PLANNED
+  ONGOING
+  COMPLETED
+  CANCELLED
 }

@@ -19,7 +19,40 @@ export const tripQuerySchema = z.object({
   startDate: z.string().or(z.date()).optional(),
   endDate: z.string().or(z.date()).optional(),
   sortBy: z.string().optional(),
-  sortBy: z.string().optional(),
+});
+
+// AI Validation Schemas
+export const recommendationSchema = z.object({
+  body: z.object({
+    budget: z.string().min(1),
+    duration: z.string().min(1),
+    interests: z.array(z.string()).min(1),
+    travelStyle: z.string().min(1),
+    season: z.string().min(1),
+  }),
+});
+
+export const itinerarySchema = z.object({
+  body: z.object({
+    destination: z.string().min(1),
+    duration: z.string().min(1),
+    preferences: z.object({
+      travelStyle: z.string().min(1),
+      interests: z.array(z.string()).min(1),
+      budget: z.string().min(1),
+    }),
+  }),
+});
+
+export const travelTipsSchema = z.object({
+  body: z.object({
+    destination: z.string().min(1),
+    preferences: z.object({
+      travelStyle: z.string().min(1),
+      budget: z.string().min(1),
+      season: z.string().min(1),
+    }),
+  }),
 });
 
 export type CreateTripInput = z.infer<typeof createTripSchema>;
